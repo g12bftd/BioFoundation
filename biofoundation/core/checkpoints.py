@@ -19,45 +19,24 @@
 
 """Checkpoint entry points shared by tasks that separate encoder from head.
 
-``run_train.py`` loads pre-trained weights by calling ``load_pretrained_checkpoint``
-for a Lightning ``.ckpt`` and ``load_safetensors_checkpoint`` for a ``.safetensors``
-file. Tasks that implement a single ``load_weights`` can mix this class in to expose
-both names without duplicating either loader.
+``run_train.py`` calls ``load_pretrained_checkpoint`` for a ``.ckpt`` and
+``load_safetensors_checkpoint`` for a ``.safetensors``; this mixin maps both onto a
+task's single ``load_weights``, leaving tensor matching to the task.
 
-``load_weights`` is deliberately not named ``load_from_checkpoint``: that name belongs
-to a :class:`pytorch_lightning.LightningModule` classmethod, and defining an instance
-method of the same name shadows it, so ``MyTask.load_from_checkpoint(path)`` would bind
-the path to ``self``.
-
-The mixin is deliberately thin: it maps names and formats, and delegates the actual
-tensor matching to the task. Loading policy, including which shape mismatches are
-tolerated, stays with the task that owns the model.
+``load_weights`` is not called ``load_from_checkpoint`` because that name is a
+:class:`pytorch_lightning.LightningModule` classmethod, and an instance method of the
+same name shadows it so ``MyTask.load_from_checkpoint(path)`` binds the path to ``self``.
 """
 
-from typing import Any, Protocol
-
-
-class _CheckpointLoadable(Protocol):  # pragma: no cover - typing only
-    """The single method a task must provide for the mixin to delegate to."""
-
-    def load_weights(self, checkpoint_path: str, **kwargs: Any) -> Any: ...
+from typing import Any
 
 
 class SafetensorsCheckpointMixin:
-    """Expose BioFoundation's two checkpoint entry points over ``load_weights``.
+    """Expose BioFoundation's two checkpoint entry points over one ``load_weights``.
 
-    Mix in ahead of :class:`pytorch_lightning.LightningModule` on tasks whose loading
-    logic already lives in ``load_weights``:
-
-    .. code-block:: python
-
-        class MyTask(SafetensorsCheckpointMixin, pl.LightningModule):
-            def load_weights(self, checkpoint_path, **kwargs): ...
-
-    ``load_safetensors_checkpoint`` converts the flat ``.safetensors`` mapping into the
-    ``{"state_dict": ...}`` layout ``load_weights`` expects, writes it to a
-    temporary file, and delegates. Keys are given a ``model.`` prefix when they lack
-    one, matching how the pre-training task saves an encoder.
+    Mix in ahead of :class:`pytorch_lightning.LightningModule`. The safetensors path
+    wraps the flat mapping in ``{"state_dict": ...}`` and prefixes bare keys with
+    ``model.``, matching how the pre-training task saves an encoder.
     """
 
     def load_pretrained_checkpoint(self, model_ckpt: str, **kwargs: Any) -> Any:

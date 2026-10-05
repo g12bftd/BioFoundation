@@ -38,13 +38,6 @@ dependencies = [
   "wandb",
 ]
 
-[tool.pytest.ini_options]
-# tests/model_tests imports the repository's own packages (models, tasks, criterion).
-# Without this, `pytest tests/model_tests` puts only the test directory on sys.path and
-# fails with ModuleNotFoundError; `python -m pytest` happened to work by adding the cwd.
-pythonpath = ["."]
-testpaths = ["tests/model_tests"]
-
 [tool.uv.sources]
 warmup-scheduler = { git = "https://github.com/ildoonet/pytorch-gradual-warmup-lr.git" }
 

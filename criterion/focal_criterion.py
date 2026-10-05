@@ -54,9 +54,8 @@ class FocalLossWrapper(nn.Module):
         Returns:
             Scalar loss.
         """
-        # For a two-logit head the binary decision is the margin between the classes.
-        # Taking pred[:, 1] alone discards the negative-class logit, so an equal shift of
-        # both logits, which leaves the softmax unchanged, would change the loss.
+        # The margin, not pred[:, 1]: that would make the loss depend on a constant
+        # shift of both logits, which leaves the softmax unchanged.
         if pred.dim() == 2 and pred.shape[1] == 2:
             logits = pred[:, 1] - pred[:, 0]
         else:

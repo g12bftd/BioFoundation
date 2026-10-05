@@ -83,12 +83,10 @@ class MaskedReconstructionLoss(nn.Module):
 
     @staticmethod
     def _mean_or_zero(values: torch.Tensor, selection: torch.Tensor) -> torch.Tensor:
-        """Mean over the selected entries, or a differentiable zero when none are selected.
+        """Mean of the selected entries, or a differentiable zero if none are selected.
 
-        ``values[selection].mean()`` is NaN for an empty selection, which happens when a
-        batch has no masked patch or, with ``alpha`` set, no visible one. A NaN loss
-        poisons every parameter on the backward pass, so an empty selection contributes
-        nothing instead.
+        ``values[selection].mean()`` is NaN on an empty selection, which would poison
+        every gradient.
         """
         if not bool(selection.any()):
             return values.sum() * 0.0

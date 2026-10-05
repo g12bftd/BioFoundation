@@ -65,18 +65,10 @@ def split_checkpoint_state_dict(checkpoint: Dict[str, Any]) -> Dict[str, Dict[st
 
 
 def freeze_pretraining_only_parameters(encoder: nn.Module) -> list:
-    """Disable gradients for encoder parameters that no fine-tuning forward pass uses.
+    """Freeze the pre-training-only tokens, which no fine-tuning forward pass touches.
 
-    The mask and pad tokens exist for masked pre-training. A fine-tuning step never
-    substitutes them, so they receive no gradient. Under DistributedDataParallel with
-    find_unused_parameters=False the reducer waits for a gradient from every parameter
-    it tracks, so leaving them trainable hangs the first training step of a multi-GPU
-    run with no error message. Freezing them removes them from DDP's set entirely,
-    which is cheaper than enabling find_unused_parameters and walking the graph on
-    every step.
-
-    LUNA disables its mask token for classification for the same reason; see
-    models/LUNA.py.
+    They would otherwise receive no gradient, and DDP with find_unused_parameters=False
+    hangs waiting for one. LUNA freezes its mask token for classification likewise.
 
     Returns:
         Names of the parameters that were frozen.
@@ -166,10 +158,8 @@ class ClassificationTask(SafetensorsCheckpointMixin, pl.LightningModule):
         return nn.ModuleDict({
             "acc": Accuracy(task=self.task_type, num_classes=self.num_classes),
             "balanced_acc": Recall(task="multiclass", num_classes=self.num_classes, average="macro"),
-            # Macro throughout. Micro-averaged precision equals accuracy for
-            # single-label multiclass, so the previous "precision" reported the same
-            # number as "acc"; weighted F1 was also inconsistent with the macro recall
-            # reported next to it.
+            # Macro throughout: micro precision equals accuracy for single-label
+            # multiclass, and weighted F1 disagreed with the macro recall beside it.
             "f1_score": F1Score(task="multiclass", num_classes=self.num_classes, average="macro"),
             "precision": Precision(task="multiclass", num_classes=self.num_classes, average="macro"),
             "cohen_kappa": CohenKappa(task=self.task_type, num_classes=self.num_classes),

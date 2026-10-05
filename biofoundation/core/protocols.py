@@ -19,25 +19,17 @@
 
 """Structural contracts for the encoder and prediction-head split.
 
-BioFoundation carries two model shapes. The five original families bundle their
-output layer into the model itself, selecting it from ``num_classes`` at
-construction time. Newer families separate the two: an encoder that produces token
-embeddings, and a prediction head that consumes them, each instantiated from its own
-Hydra group.
+The five original families bundle their output layer into the model, selecting it from
+``num_classes``. Newer families separate an encoder that produces token embeddings from
+a prediction head that consumes them, each from its own Hydra group; the protocols
+below describe that second shape.
 
-The protocols below describe the second shape. They are :class:`typing.Protocol`
-definitions, so conformance is structural: a module satisfies one by having a
-matching ``forward``, with no base class to inherit and no registration step. That
-keeps the bundled families valid exactly as they are while giving the split families
-a contract a type checker can verify.
+Conformance is structural, so the bundled families stay valid unchanged. The signatures
+are concrete on purpose: a ``forward`` accepting ``*args, **kwargs`` would be satisfied
+by every :class:`torch.nn.Module` and check nothing.
 
-The signatures are deliberately concrete. A protocol whose ``forward`` accepted
-``*args, **kwargs`` would be satisfied by every :class:`torch.nn.Module` and would
-check nothing, so each one names the arguments the boundary actually carries.
-
-Tensors are annotated only under :data:`typing.TYPE_CHECKING`. This module is
-imported by the fast contract test suite, which runs without PyTorch installed, so
-nothing here may import ``torch`` at runtime.
+Tensors are annotated only under :data:`typing.TYPE_CHECKING`, because the fast contract
+suite imports this module without PyTorch installed.
 """
 
 from typing import TYPE_CHECKING, Any, Optional, Protocol, runtime_checkable

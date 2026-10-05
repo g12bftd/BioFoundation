@@ -22,19 +22,15 @@ tag: SCEReBrO_finetune
 # model_size is supplied by the selected config/model group, so it always matches
 # the encoder actually being built.
 
-# Where snapshot_download placed the Hugging Face release. Kept separate from the
-# checkpoint path so a run can point at one file without restating the root:
-#   pretrained_safetensors_path='${pretrained_root}/SCEReBrO_${model_size}.safetensors'
+# Download root for the Hugging Face release, so a run can name a checkpoint without
+# restating the path: pretrained_safetensors_path='${pretrained_root}/SCEReBrO_${model_size}.safetensors'
 pretrained_root: ${env:CHECKPOINT_DIR}/pretrained/S-CEReBrO
 
 # Names the registry entry whose BatchRequirements the task enforces on every batch.
 model_family: s-cerebro
 
-# The corpus is selected as a single config group. Each file in config/dataset/ owns
-# everything that varies per corpus: its path, whether samples are windows or
-# sequences, whether labels are classes or a continuous target, the channel count, and
-# the matching prediction head, task and criterion. Switch corpus with one override:
-#   python -u run_train.py +experiment=SCEReBrO_finetune dataset=isruc
+# Each file in config/dataset/ owns everything that varies per corpus, including the
+# matching head, task and criterion. Switch with: dataset=isruc
 
 gpus: -1
 num_nodes: 1
@@ -51,23 +47,14 @@ find_unused_parameters: True
 pretrained_checkpoint_path: null
 pretrained_safetensors_path: null
 
-# Normalisation for S-CEReBrO is min-max to [-1, 1], applied per channel by
-# LMDBDataset via apply_minmax and written into TUEG offline by make_tueg. The
-# quantile normalisation that config/defaults.yaml configures belongs to the tasks the
-# bundled families use; the S-CEReBrO tasks never read input_normalization. It is
-# disabled here so the resolved config cannot be misread as enabling it.
+# S-CEReBrO normalises with min-max in LMDBDataset, not here. Disabled so the
+# inherited quantile settings cannot be misread as active.
 input_normalization:
   normalize: False
 
 defaults:
-  # The dataset group brings its own model_head, task and criterion, so this experiment
-  # deliberately does not select them. Hydra applies a config's own values after its
-  # defaults list, so anything set here would win over the group and the two could
-  # disagree; leaving them to config/dataset/ makes one file the single owner.
-  #
-  # model_head is not in the global defaults, so the dataset group adds it rather than
-  # overriding it, which leaves the five bundled families composing exactly as before.
-  # Hydra requires additions before overrides in a defaults list.
+  # model_head, task and criterion come from the dataset group. Setting them here
+  # would win over it, since Hydra applies a config's own values after its defaults.
   - /dataset: tuab
   - override /data_module: finetune_data_module_SCEReBrO
   - override /model: SCEReBrO_tiny        # or SCEReBrO_small, SCEReBrO_base

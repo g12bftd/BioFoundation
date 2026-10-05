@@ -112,9 +112,8 @@ class WindowedAlternatingAttention(nn.Module):
         dilation_temporal: int = 1,
         include_self: bool = True,
         qkv_bias: bool = False,
-        # TransformerBlock always passes qk_norm explicitly and defaults it to False,
-        # so this default is never what the encoder uses. Kept in step with the caller
-        # to stop a direct instantiation silently differing from a configured one.
+        # TransformerBlock always passes this explicitly; kept in step with its default
+        # so a direct instantiation does not silently differ from a configured one.
         qk_norm: bool = False,
         normalize_qk: bool = False,
         attn_drop: float = 0.0,

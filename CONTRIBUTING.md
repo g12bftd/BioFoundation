@@ -43,14 +43,6 @@ python -m unittest discover -s tests -p 'test_*.py' -v
 python -m compileall -q biofoundation run_train.py models tasks datasets data_module
 ```
 
-Tests that import PyTorch live under `tests/model_tests/` and run with `pytest`. That
-directory is not a package, so `unittest discover` does not traverse it and the fast
-suite stays runnable without the training dependencies installed.
-
-```bash
-pytest tests/model_tests -v
-```
-
 ## Official Checkpoint Improvements
 
 The published weights are licensed under CC BY-ND 4.0. Modified weights, including adapters, deltas, pruned variants, and quantized variants, may not be redistributed.

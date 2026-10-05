@@ -125,9 +125,8 @@ def main():
             continue
         (depressed if label_of(subject) else healthy).append(filename)
 
-    # Cut on the ordered subject list, not on the file list. Each subject contributes an
-    # eyes-closed and an eyes-open recording, so an index cut over filenames splits one
-    # subject across two splits whenever a file is missing or the counts are uneven.
+    # Cut on subjects, not filenames: each subject has an eyes-closed and an eyes-open
+    # recording, so an index cut straddles splits whenever a file is missing.
     def assign(filenames, train_end, val_end):
         subjects = sorted({subject_of(name) for name in filenames} - {None})
         chosen = {

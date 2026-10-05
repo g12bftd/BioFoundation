@@ -79,9 +79,8 @@ class MlpClassificationHead(nn.Module):
         if pooling_method == "mean":
             self.classifier = nn.Linear(embed_dim, num_classes)
         else:
-            # The first layer is (num_tokens * embed_dim) x (num_patches * embed_dim),
-            # which is quartic in the window and grows with the montage: 64 channels,
-            # 10 patches and embed_dim 400 is already 1.02e9 parameters in one matrix.
+            # The first layer is quartic in the window: 64 channels, 10 patches and
+            # embed_dim 400 is 1.02e9 parameters in one matrix.
             first_layer = self.num_tokens * embed_dim * num_patches * embed_dim
             if first_layer > FLATTEN_PARAMETER_WARNING:
                 warnings.warn(
@@ -124,9 +123,8 @@ class MlpClassificationHead(nn.Module):
             x = self.pooler(x)
 
         if self.pooling_method == "mean":
-            # Unmasked mean over every token. Fine-tuning never pads, so all tokens are
-            # real; enabling zero-padding for fine-tuning would need an attention mask
-            # threaded in here, otherwise pad tokens would dilute the pooled vector.
+            # Unmasked: fine-tuning never pads. Padded fine-tuning would need a mask
+            # here, or pad tokens would dilute the pooled vector.
             x = x.mean(dim=1)
         else:
             batch, num_tokens, embed_dim = x.shape

@@ -196,9 +196,7 @@ class LMDBWriter:
                 )
                 print(f"           labels {distribution}")
         print("  window shapes: " + ", ".join(f"{shape}:{count}" for shape, count in sorted(self.shapes.items())))
-        # Compare every pair of splits. Intersecting all of them at once only flags a
-        # subject present in train and val and test, so a train/test leak between two
-        # splits went unreported, which is the case that actually invalidates a result.
+        # Pairwise: intersecting all splits at once misses a train/test-only leak.
         names = sorted(self.splits)
         for index, first in enumerate(names):
             for second in names[index + 1:]:

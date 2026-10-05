@@ -81,12 +81,8 @@ class MaskedAutoencoderPretrainingTask(SafetensorsCheckpointMixin, pl.LightningM
         self.patch_size = self.hparams.model.patch_size
         self.num_channels = self.hparams.model.num_channels
         self.embed_dim = self.hparams.model.embed_dim
-        # The mask and pad tokens are referenced through self.model rather than
-        # aliased onto this module. Assigning an nn.Parameter to a second module
-        # registers it a second time, so the checkpoint would carry both
-        # "model.mask_token" and "mask_token" backed by one storage. safetensors
-        # rejects shared storage, which would make the encoder undistributable in the
-        # format the Hugging Face releases use.
+        # The mask and pad tokens stay on self.model. Aliasing them here would register
+        # them twice on one storage, which safetensors refuses to save.
         self.strict_loading = False
 
     def on_after_batch_transfer(self, batch: Dict[str, Any], dataloader_idx: int) -> Dict[str, Any]:
@@ -98,13 +94,10 @@ class MaskedAutoencoderPretrainingTask(SafetensorsCheckpointMixin, pl.LightningM
         return batch
 
     def _validation_generator(self, batch: Dict[str, Any]) -> torch.Generator:
-        """Return a generator that makes the validation mask reproducible.
+        """Seed the validation mask so ``val_loss`` is comparable across epochs.
 
-        Training draws a fresh mask every step, which is the point of masked
-        pre-training. Validation must not: ``val_loss`` selects checkpoints, and a new
-        random mask each epoch adds sampling noise to the quantity being compared.
-        Seeding from the configured seed and the batch shape gives every epoch the same
-        masks while still varying them across batches.
+        Checkpoint selection monitors ``val_loss``, so a fresh random mask each epoch
+        would add sampling noise to the compared quantity. Training stays random.
         """
         generator = torch.Generator(device=batch["input"].device)
         generator.manual_seed(int(self.hparams.get("seed", 0)) * 1_000_003 + int(batch["input"].shape[0]))

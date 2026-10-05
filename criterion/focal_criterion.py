@@ -54,12 +54,10 @@ class FocalLossWrapper(nn.Module):
         Returns:
             Scalar loss.
         """
-        # The margin, not pred[:, 1]: that would make the loss depend on a constant
-        # shift of both logits, which leaves the softmax unchanged.
-        if pred.dim() == 2 and pred.shape[1] == 2:
-            logits = pred[:, 1] - pred[:, 0]
-        else:
-            logits = pred.reshape(-1)
+        # The class-1 logit, matching the BIOT reference this follows. The loss is
+        # therefore not invariant to a constant shift of both logits; the published
+        # results were produced this way, so do not substitute the class margin.
+        logits = pred[:, 1] if pred.dim() == 2 and pred.shape[1] == 2 else pred.reshape(-1)
         targets = batch["label"].reshape(-1).to(logits.dtype)
 
         prob = torch.sigmoid(logits)

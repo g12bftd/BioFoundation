@@ -38,23 +38,18 @@ COMMIT_INTERVAL = 4000
 
 
 def electrode_coordinate(name: str) -> Tuple[float, float, float]:
-    """Return the 3D coordinate of one electrode.
+    """Return the 3D coordinate of one electrode, or the origin if it is unknown.
 
-    An unrecognised name raises rather than returning the origin. The origin is a
-    plausible-looking coordinate that the encoder cannot distinguish from a real
-    position, so a montage typo would otherwise train on silently wrong geometry. It is
-    also what padded channels carry, which pre-training uses to detect padding.
+    The origin fallback matches the reference preprocessing that produced the published
+    corpora, so it is kept deliberately. It is also what padded channels carry, so an
+    unrecognised name is indistinguishable from padding; every electrode in every
+    montage shipped here resolves, and a new montage should be checked against
+    ELECTRODE_ANGLES and SPECIAL_REFERENCE_POSITIONS before use.
     """
     if name in electrode_positions.ELECTRODE_ANGLES:
         angles = electrode_positions.ELECTRODE_ANGLES[name]
         return electrode_positions.get_electrode_3d_positions(angles["theta"], angles["phi"])
-    if name in electrode_positions.SPECIAL_REFERENCE_POSITIONS:
-        return electrode_positions.SPECIAL_REFERENCE_POSITIONS[name]
-    raise KeyError(
-        f"Unknown electrode {name!r}. Add it to ELECTRODE_ANGLES or, for a reference "
-        "without a scalp position, to SPECIAL_REFERENCE_POSITIONS in "
-        "make_datasets/electrode_positions.py."
-    )
+    return electrode_positions.SPECIAL_REFERENCE_POSITIONS.get(name, (0.0, 0.0, 0.0))
 
 
 def referential_coordinates(channel_names: Sequence[str], reference: str) -> np.ndarray:

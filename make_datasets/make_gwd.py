@@ -66,17 +66,27 @@ def process_recording(task):
 
     try:
         source_freq = float(header["sample_rate"][0][0])
-    except Exception:
+    except (KeyError, IndexError, TypeError, ValueError) as error:
+        # Assuming the target rate when the real one is unreadable silently resamples by
+        # the wrong factor, so say so rather than failing quietly.
         source_freq = float(SAMPLING_FREQ)
+        print(
+            f"  {os.path.basename(path)}: sample_rate unreadable ({type(error).__name__}); "
+            f"assuming {source_freq:g} Hz"
+        )
 
     try:
         eeg_indices = header["channels_eeg"][0][0].flatten() - 1
         raw_labels = header["channels_labels"][0][0].flatten()
         labels = [str(label[0]) if isinstance(label, np.ndarray) else str(label) for label in raw_labels]
         channel_names = [labels[index] for index in eeg_indices]
-    except Exception:
+    except (KeyError, IndexError, TypeError, ValueError) as error:
         eeg_indices = np.arange(signal.shape[0])
         channel_names = [f"Ch{index + 1}" for index in eeg_indices]
+        print(
+            f"  {os.path.basename(path)}: channel labels unreadable "
+            f"({type(error).__name__}); using positional names"
+        )
 
     data = signal[eeg_indices, :]
     info = mne.create_info(ch_names=channel_names, sfreq=source_freq, ch_types="eeg", verbose=False)

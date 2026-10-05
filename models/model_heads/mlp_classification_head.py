@@ -19,9 +19,14 @@
 #* Imported from the S-CEReBrO reference implementation (TimeFM).             *
 #*----------------------------------------------------------------------------*
 
+import warnings
+
 import torch
 import torch.nn as nn
 from timm.layers import trunc_normal_
+
+# Above this, a flatten classifier is almost certainly a configuration mistake.
+FLATTEN_PARAMETER_WARNING = 100_000_000
 
 
 class MlpClassificationHead(nn.Module):
@@ -74,6 +79,19 @@ class MlpClassificationHead(nn.Module):
         if pooling_method == "mean":
             self.classifier = nn.Linear(embed_dim, num_classes)
         else:
+            # The first layer is (num_tokens * embed_dim) x (num_patches * embed_dim),
+            # which is quartic in the window and grows with the montage: 64 channels,
+            # 10 patches and embed_dim 400 is already 1.02e9 parameters in one matrix.
+            first_layer = self.num_tokens * embed_dim * num_patches * embed_dim
+            if first_layer > FLATTEN_PARAMETER_WARNING:
+                warnings.warn(
+                    f"pooling_method='flatten' with num_channels={num_channels}, "
+                    f"num_patches={num_patches} and embed_dim={embed_dim} builds a first "
+                    f"layer of {first_layer:,} parameters. Use pooling_method='mean' "
+                    "unless the flattened layout is specifically required.",
+                    RuntimeWarning,
+                    stacklevel=2,
+                )
             self.classifier = nn.Sequential(
                 nn.Linear(self.num_tokens * embed_dim, num_patches * embed_dim),
                 nn.ELU(),
@@ -106,6 +124,9 @@ class MlpClassificationHead(nn.Module):
             x = self.pooler(x)
 
         if self.pooling_method == "mean":
+            # Unmasked mean over every token. Fine-tuning never pads, so all tokens are
+            # real; enabling zero-padding for fine-tuning would need an attention mask
+            # threaded in here, otherwise pad tokens would dilute the pooled vector.
             x = x.mean(dim=1)
         else:
             batch, num_tokens, embed_dim = x.shape

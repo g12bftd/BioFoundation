@@ -85,7 +85,7 @@ class SCerebroEncoder(nn.Module):
         proj_drop: float = 0.1,
         max_channels: int = 64,
         max_timesteps: int = 6000,
-        window_size_spatial: int = 5,
+        window_size_spatial: int = 7,
         window_size_temporal: int = 5,
         dilation_cycle_spatial: Iterable[int] = (1, 2, 4),
         dilation_cycle_temporal: Iterable[int] = (1, 2, 4),

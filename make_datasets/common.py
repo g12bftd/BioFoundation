@@ -38,11 +38,23 @@ COMMIT_INTERVAL = 4000
 
 
 def electrode_coordinate(name: str) -> Tuple[float, float, float]:
-    """Return the 3D coordinate of one electrode, or the origin if it is unknown."""
+    """Return the 3D coordinate of one electrode.
+
+    An unrecognised name raises rather than returning the origin. The origin is a
+    plausible-looking coordinate that the encoder cannot distinguish from a real
+    position, so a montage typo would otherwise train on silently wrong geometry. It is
+    also what padded channels carry, which pre-training uses to detect padding.
+    """
     if name in electrode_positions.ELECTRODE_ANGLES:
         angles = electrode_positions.ELECTRODE_ANGLES[name]
         return electrode_positions.get_electrode_3d_positions(angles["theta"], angles["phi"])
-    return electrode_positions.SPECIAL_REFERENCE_POSITIONS.get(name, (0.0, 0.0, 0.0))
+    if name in electrode_positions.SPECIAL_REFERENCE_POSITIONS:
+        return electrode_positions.SPECIAL_REFERENCE_POSITIONS[name]
+    raise KeyError(
+        f"Unknown electrode {name!r}. Add it to ELECTRODE_ANGLES or, for a reference "
+        "without a scalp position, to SPECIAL_REFERENCE_POSITIONS in "
+        "make_datasets/electrode_positions.py."
+    )
 
 
 def referential_coordinates(channel_names: Sequence[str], reference: str) -> np.ndarray:
@@ -184,12 +196,19 @@ class LMDBWriter:
                 )
                 print(f"           labels {distribution}")
         print("  window shapes: " + ", ".join(f"{shape}:{count}" for shape, count in sorted(self.shapes.items())))
-        if len(self.splits) > 1:
-            overlap = set.intersection(*(self.subjects[s] for s in self.splits)) if all(
-                self.subjects[s] for s in self.splits
-            ) else set()
-            if overlap:
-                print(f"  WARNING: {len(overlap)} subjects appear in more than one split")
+        # Compare every pair of splits. Intersecting all of them at once only flags a
+        # subject present in train and val and test, so a train/test leak between two
+        # splits went unreported, which is the case that actually invalidates a result.
+        names = sorted(self.splits)
+        for index, first in enumerate(names):
+            for second in names[index + 1:]:
+                overlap = self.subjects[first] & self.subjects[second]
+                if overlap:
+                    sample = ", ".join(sorted(overlap)[:5])
+                    print(
+                        f"  WARNING: {len(overlap)} subjects appear in both "
+                        f"{first} and {second} ({sample}...)"
+                    )
 
 
 class PackedLMDBWriter:

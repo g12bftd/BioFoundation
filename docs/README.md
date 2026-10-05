@@ -41,7 +41,7 @@ The training guide covers environment variables, Hydra experiment selection, the
 
 - [`CONTRIBUTING.md`](../CONTRIBUTING.md) defines extension and pull request expectations.
 - [`docs/adr`](./adr/) records architecture decisions affecting the shared contracts.
-- [`CITATIONS.md`](./CITATIONS.md) contains BibTeX for all five model families.
+- [`CITATIONS.md`](./CITATIONS.md) contains BibTeX for all six model families.
 - [`config/README.md`](../config/README.md) explains Hydra composition and overrides.
 - [`make_datasets/README.md`](../make_datasets/README.md) documents preprocessing and HDF5 conversion.
 

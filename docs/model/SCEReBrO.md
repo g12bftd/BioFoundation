@@ -41,13 +41,22 @@ Two channel counts coexist and mean different things. `model.num_channels` is ho
 
 For pre-training, corpora with fewer channels are zero-padded up to `max_channels` by `LMDBDataset`, and the padded channels are replaced by a learned pad token, excluded from masking, and masked out of attention. Fine-tuning does not pad: the encoder is simply built at the montage's own size.
 
+This is why the registry entry declares only `channel_coords` and not `num_padded_channels`. Padding metadata is required by pre-training and irrelevant to fine-tuning, and both stages share one registry entry, so declaring it would force every future S-CEReBrO dataset to emit a field half the pipeline ignores. The pre-training task reads it with `batch.get`, which tolerates its absence.
+
 ### Preprocessing
 
 Datasets are prepared into LMDB with [`make_datasets`](../../make_datasets/). Each entry is a pickled dictionary with `eeg`, `channel_coords`, and optionally `label` and `subject_id`. Electrode coordinates come from [`make_datasets/electrode_positions.py`](../../make_datasets/electrode_positions.py), which follows the BESA electrode and surface location tables and assigns fixed coordinates to reference electrodes that have no scalp position of their own.
 
 ```bash
-python -m make_datasets.make_tuab   --output $DATA_PATH/finetuning/TUAB
-python -m make_datasets.make_tueg   --output $DATA_PATH/pretraining/TUEG
+python -m make_datasets.make_tuab \
+  --input_dir /raw/tuab --output_dir $DATA_PATH/finetuning/TUAB
+
+# make_tueg holds out every subject found in the raw TUAB corpus so they cannot leak
+# into the TUAB fine-tuning splits. Pass --allow_tuab_overlap only when TUAB is not
+# among the downstream datasets.
+python -m make_datasets.make_tueg \
+  --input_dir /raw/tueg --output_dir $DATA_PATH/pretraining/TUEG \
+  --tuab_dir /raw/tuab
 ```
 
 ### Architecture Overview
@@ -68,6 +77,10 @@ Attention alternates by block index:
 | odd | patch positions, within a fixed channel (temporal) | `window_size_temporal`, dilated by `dilation_cycle_temporal`, shifted by `shift_cycle_temporal` |
 
 Dilation and shift schedules are indexed by spatial/temporal *pair*, so a spatial block and the temporal block after it share a schedule entry. Setting `use_axial_mode: True` runs all spatial blocks before all temporal blocks instead.
+
+A window does not necessarily include the query itself. `include_self` places an offset of zero in the window, but the shift is applied afterwards, so self-attention survives only when the shift is a multiple of the dilation. With the shipped schedules that holds for the first pair alone, and four of the six blocks do not attend to themselves. The published weights were trained this way; it is the behaviour of the method, not a defect to correct.
+
+Window extents are computed from the channel count the encoder was built for, and positions are clamped at the edges. A montage zero-padded to `max_channels` during pre-training therefore sees different spatial neighbours near the edge than the same montage run unpadded at its own size during fine-tuning.
 
 `attention_type` selects the mechanism: `windowed-alternating` is the published method; `alternating` (no windowing) and `full` (all tokens at once) are the ablation baselines.
 
@@ -156,6 +169,13 @@ python -u run_train.py +experiment=SCEReBrO_finetune dataset=tuab model.num_chan
 
 **Adding a corpus.** Copy the closest file in `config/dataset/`, set its path, channel count and label details, and leave the head, task and criterion selections alone unless the task type differs. Do not set these values in the experiment: Hydra applies a config's own values after its defaults list, so a key set in both places resolves to the experiment's copy and the dataset file is silently ignored. A contract test enforces this.
 
+On PyTorch 2.6 and newer, the final validation and test passes fail when reloading a
+checkpoint with `UnpicklingError: Weights only load failed`, because `torch.load` now
+defaults to `weights_only=True` and every task stores its Hydra configuration in the
+checkpoint. This affects `run_train.py` for all model families, not only this one.
+Either export `TORCH_FORCE_NO_WEIGHTS_ONLY_LOAD=1` or pass `final_validate=False
+final_test=False`.
+
 A linear-probe style run freezes the encoder blocks while leaving tokenisation and the embeddings trainable:
 
 ```bash
@@ -164,48 +184,6 @@ python -u run_train.py +experiment=SCEReBrO_finetune task.freeze_backbone=True
 
 Fine-tuning uses layer-wise learning-rate decay: blocks closer to the input receive `lr * decay ** (depth - 1 - block_idx)`. Biases, normalisation weights, and the embedding tables are excluded from weight decay, and the head forms its own parameter group.
 
-### Smoke Test With Synthetic Data
-
-To check the pipeline end to end without prepared data, generate synthetic corpora in
-the exact on-disk formats the readers expect. The signals are band-limited noise and
-the labels are random, so this verifies that a run works, not that it learns anything.
-
-```bash
-export DATA_PATH=/absolute/path/to/dummy-data
-export CHECKPOINT_DIR=/absolute/path/to/experiments
-
-python -m make_datasets.make_dummy_scerebro_dataset --output $DATA_PATH \
-  --pretrain-samples 24 --finetune-samples 32
-```
-
-Add `--datasets pretrain tuab isruc seed-vig` to also generate the sequence and
-regression corpora.
-
-Pre-train, then fine-tune from the resulting checkpoint:
-
-```bash
-python -u run_train.py +experiment=SCEReBrO_pretrain \
-  trainer.accelerator=cpu trainer.devices=1 trainer.strategy=auto \
-  trainer.max_epochs=1 trainer.accumulate_grad_batches=1 \
-  trainer.check_val_every_n_epoch=1 scheduler.warmup_epochs=0 \
-  batch_size=4 num_workers=0 final_validate=False
-
-python -u run_train.py +experiment=SCEReBrO_finetune \
-  pretrained_checkpoint_path=$CHECKPOINT_DIR/checkpoints/SCEReBrO_pretrain/<run>/last.ckpt \
-  trainer.accelerator=cpu trainer.devices=1 trainer.strategy=auto \
-  trainer.max_epochs=2 scheduler.warmup_epochs=0 \
-  batch_size=4 num_workers=0
-```
-
-Drop the `trainer.*` and `num_workers` overrides on a GPU machine; they exist only to
-make the run finish quickly on CPU.
-
-On PyTorch 2.6 and newer, reloading a checkpoint for the final validation and test
-passes fails with `UnpicklingError: Weights only load failed`, because `torch.load`
-now defaults to `weights_only=True` and every task stores its Hydra configuration in
-the checkpoint. This affects `run_train.py` for all model families, not only this one.
-Either export `TORCH_FORCE_NO_WEIGHTS_ONLY_LOAD=1` or pass `final_validate=False
-final_test=False`.
 
 ### Pretrained Weights
 

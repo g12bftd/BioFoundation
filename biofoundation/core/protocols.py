@@ -31,6 +31,10 @@ matching ``forward``, with no base class to inherit and no registration step. Th
 keeps the bundled families valid exactly as they are while giving the split families
 a contract a type checker can verify.
 
+The signatures are deliberately concrete. A protocol whose ``forward`` accepted
+``*args, **kwargs`` would be satisfied by every :class:`torch.nn.Module` and would
+check nothing, so each one names the arguments the boundary actually carries.
+
 Tensors are annotated only under :data:`typing.TYPE_CHECKING`. This module is
 imported by the fast contract test suite, which runs without PyTorch installed, so
 nothing here may import ``torch`` at runtime.
@@ -58,8 +62,14 @@ class SignalEncoder(Protocol):
     :class:`~biofoundation.core.batch.BatchRequirements`.
     """
 
-    def forward(self, x: "Tensor", *args: Any, **kwargs: Any) -> "Tensor":
-        """Encode a patched biosignal into token embeddings."""
+    def forward(self, x: "Tensor", channel_positions: "Tensor") -> "Tensor":
+        """Encode a patched biosignal into token embeddings.
+
+        Args:
+            x: ``(batch, channels, patches, patch_size)``.
+            channel_positions: Electrode geometry, shaped as the family's
+                :class:`~biofoundation.core.batch.BatchRequirements` declares.
+        """
         ...
 
 
@@ -73,8 +83,8 @@ class PredictionHead(Protocol):
     swapping the task means swapping the head alone.
     """
 
-    def forward(self, x: "Tensor", *args: Any, **kwargs: Any) -> "Tensor":
-        """Map token embeddings to a prediction."""
+    def forward(self, x: "Tensor") -> "Tensor":
+        """Map ``(batch, num_tokens, embed_dim)`` token embeddings to a prediction."""
         ...
 
 

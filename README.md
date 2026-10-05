@@ -107,6 +107,6 @@ Numerical changes to models, losses, or datasets should also be tested with repr
 
 ## Licensing and Support
 
-The source code is licensed under Apache 2.0. Pretrained weights in the five PulpBio Hugging Face repositories are licensed under CC BY-ND 4.0; see the model cards for terms and checkpoint-specific details.
+The source code is licensed under Apache 2.0. Pretrained weights in the six PulpBio Hugging Face repositories are licensed under CC BY-ND 4.0; see the model cards for terms and checkpoint-specific details.
 
 For questions and support, open an [issue](https://github.com/pulp-bio/BioFoundation/issues). For changes, start with [CONTRIBUTING.md](CONTRIBUTING.md).

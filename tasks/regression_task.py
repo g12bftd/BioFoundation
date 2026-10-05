@@ -279,24 +279,29 @@ class RegressionTask(SafetensorsCheckpointMixin, pl.LightningModule):
         """Advance the timm-style scheduler once per optimiser step."""
         scheduler.step_update(num_updates=self.global_step)
 
-    def load_from_checkpoint(
-        self, checkpoint_path, map_location=None, hparams_file=None, strict=None, **kwargs
+    def load_weights(
+        self, checkpoint_path, map_location=None, **kwargs
     ) -> "RegressionTask":
         """Load encoder weights from a checkpoint, skipping the head."""
         checkpoint = torch.load(checkpoint_path, map_location=map_location, weights_only=False)
         state_dicts = split_checkpoint_state_dict(checkpoint)
         current = self.model.state_dict()
 
-        loaded, skipped = [], []
+        loaded, skipped, unexpected = [], [], []
         for key, value in state_dicts["model"].items():
-            if key in current and value.shape == current[key].shape:
+            if key not in current:
+                unexpected.append(key)
+            elif value.shape != current[key].shape:
+                skipped.append(key)
+            else:
                 current[key] = value
                 loaded.append(key)
-            else:
-                skipped.append(key)
 
         self.model.load_state_dict(current, strict=False)
-        print(f"[load:model] loaded={len(loaded)} skipped={len(skipped)} total_target={len(current)}")
+        print(
+            f"[load:model] loaded={len(loaded)} shape_mismatch={len(skipped)} "
+            f"unexpected={len(unexpected)} total_target={len(current)}"
+        )
         if not loaded:
             print("[load:model] WARNING: no tensors were loaded from this checkpoint")
 

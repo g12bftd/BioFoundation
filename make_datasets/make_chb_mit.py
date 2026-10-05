@@ -87,7 +87,11 @@ def process_recording(task):
 
     try:
         raw = np.stack([recording[name] for name in CHANNEL_NAMES], axis=0)
-    except KeyError:
+    except KeyError as error:
+        # A recording on a different montage cannot be assembled into the fixed
+        # 16-channel order. Report it rather than returning an empty list, so a corpus
+        # that silently yields far fewer windows than expected is visible.
+        print(f"  skipping {os.path.basename(path)}: missing channel {error.args[0]!r}")
         return []
 
     seizures = recording.get("metadata", {}).get("times", [])

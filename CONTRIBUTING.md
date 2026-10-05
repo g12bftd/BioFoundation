@@ -20,7 +20,7 @@ BioFoundation is both a research repository and an onboarding codebase. Contribu
 1. Add the `nn.Module` implementation under `models/` and its Hydra model config under `config/model/`. A family may either bundle its output layer into the model, as the five original families do, or separate an encoder from a prediction head under `models/model_heads/` with a matching `config/model_head/` entry. The second shape is described by the protocols in `biofoundation/core/protocols.py` and lets one pre-trained encoder serve every downstream task.
 2. Add pre-training and fine-tuning experiments under `config/experiment/`.
 3. Use an existing task when its behavior fits. New task steps must use the shared batch adapter.
-4. Register the model in `biofoundation/model_registry.py`, including modalities, architecture, experiment names, batch requirements, venue, paper, and Hugging Face URL. Use the case-folded display name as the key, and list any prediction heads in `head_targets`. Set `model_family` in the experiment so tasks can enforce the declared batch requirements at runtime.
+4. Register the model in `biofoundation/model_registry.py`, including modalities, architecture, experiment names, batch requirements, venue, paper, and Hugging Face URL. Use the case-folded display name as the key, and list any prediction heads in `head_targets`. Setting `model_family` in the experiment lets a task look its family up and enforce the declared batch requirements at runtime. Only the S-CEReBrO tasks read it today; the five bundled families validate nothing at runtime.
 5. Add a model page under `docs/model/` with input assumptions, training details, and checkpoint usage.
 6. Extend the contract tests for any new shared behavior.
 

@@ -166,8 +166,12 @@ class ClassificationTask(SafetensorsCheckpointMixin, pl.LightningModule):
         return nn.ModuleDict({
             "acc": Accuracy(task=self.task_type, num_classes=self.num_classes),
             "balanced_acc": Recall(task="multiclass", num_classes=self.num_classes, average="macro"),
-            "f1_score": F1Score(task="multiclass", num_classes=self.num_classes, average="weighted"),
-            "precision": Precision(task="multiclass", num_classes=self.num_classes, average="micro"),
+            # Macro throughout. Micro-averaged precision equals accuracy for
+            # single-label multiclass, so the previous "precision" reported the same
+            # number as "acc"; weighted F1 was also inconsistent with the macro recall
+            # reported next to it.
+            "f1_score": F1Score(task="multiclass", num_classes=self.num_classes, average="macro"),
+            "precision": Precision(task="multiclass", num_classes=self.num_classes, average="macro"),
             "cohen_kappa": CohenKappa(task=self.task_type, num_classes=self.num_classes),
             "auroc": AUROC(task=self.task_type, num_classes=self.num_classes, average="macro"),
             "aupr": AveragePrecision(task=self.task_type, num_classes=self.num_classes, average="macro"),
@@ -343,12 +347,10 @@ class ClassificationTask(SafetensorsCheckpointMixin, pl.LightningModule):
         """Advance the timm-style scheduler once per optimiser step."""
         scheduler.step_update(num_updates=self.global_step)
 
-    def load_from_checkpoint(
+    def load_weights(
         self,
         checkpoint_path,
         map_location=None,
-        hparams_file=None,
-        strict=None,
         include_head: bool = False,
         **kwargs,
     ) -> "ClassificationTask":

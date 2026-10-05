@@ -54,7 +54,13 @@ class FocalLossWrapper(nn.Module):
         Returns:
             Scalar loss.
         """
-        logits = pred[:, 1] if pred.dim() == 2 and pred.shape[1] == 2 else pred.reshape(-1)
+        # For a two-logit head the binary decision is the margin between the classes.
+        # Taking pred[:, 1] alone discards the negative-class logit, so an equal shift of
+        # both logits, which leaves the softmax unchanged, would change the loss.
+        if pred.dim() == 2 and pred.shape[1] == 2:
+            logits = pred[:, 1] - pred[:, 0]
+        else:
+            logits = pred.reshape(-1)
         targets = batch["label"].reshape(-1).to(logits.dtype)
 
         prob = torch.sigmoid(logits)

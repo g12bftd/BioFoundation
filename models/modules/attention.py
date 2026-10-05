@@ -42,7 +42,12 @@ def build_window_indices(
         length: Number of positions along the axis.
         window_size: Requested window size; clamped to ``length``.
         dilation: Spacing between consecutive window offsets.
-        include_self: Whether a position attends to itself.
+        include_self: Place an offset of 0 in the window before the shift is applied.
+            This guarantees self-attention only when ``shift`` is a multiple of
+            ``dilation``; otherwise the shift moves every offset, zero included, off the
+            query. With the shipped schedules four of six blocks do not attend to
+            themselves. The published weights were trained this way, so the behaviour is
+            intentional and must not be changed.
         shift: Constant offset applied to the whole window.
         device: Device of the returned index tensor.
 
@@ -107,7 +112,10 @@ class WindowedAlternatingAttention(nn.Module):
         dilation_temporal: int = 1,
         include_self: bool = True,
         qkv_bias: bool = False,
-        qk_norm: bool = True,
+        # TransformerBlock always passes qk_norm explicitly and defaults it to False,
+        # so this default is never what the encoder uses. Kept in step with the caller
+        # to stop a direct instantiation silently differing from a configured one.
+        qk_norm: bool = False,
         normalize_qk: bool = False,
         attn_drop: float = 0.0,
         proj_drop: float = 0.0,

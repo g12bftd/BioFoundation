@@ -125,10 +125,26 @@ def main():
             continue
         (depressed if label_of(subject) else healthy).append(filename)
 
+    # Cut on the ordered subject list, not on the file list. Each subject contributes an
+    # eyes-closed and an eyes-open recording, so an index cut over filenames splits one
+    # subject across two splits whenever a file is missing or the counts are uneven.
+    def assign(filenames, train_end, val_end):
+        subjects = sorted({subject_of(name) for name in filenames} - {None})
+        chosen = {
+            **{subject: "train" for subject in subjects[:train_end]},
+            **{subject: "val" for subject in subjects[train_end:val_end]},
+            **{subject: "test" for subject in subjects[val_end:]},
+        }
+        return {name: chosen[subject_of(name)] for name in filenames}
+
+    # The published counts are file counts over two recordings per subject.
+    placement = {
+        **assign(healthy, HEALTHY_TRAIN // 2, HEALTHY_VAL // 2),
+        **assign(depressed, DEPRESSED_TRAIN // 2, DEPRESSED_VAL // 2),
+    }
     splits = {
-        "train": healthy[:HEALTHY_TRAIN] + depressed[:DEPRESSED_TRAIN],
-        "val": healthy[HEALTHY_TRAIN:HEALTHY_VAL] + depressed[DEPRESSED_TRAIN:DEPRESSED_VAL],
-        "test": healthy[HEALTHY_VAL:] + depressed[DEPRESSED_VAL:],
+        split: [name for name, chosen in placement.items() if chosen == split]
+        for split in ("train", "val", "test")
     }
     tasks = [
         (split, args.input_dir, filename) for split, names in splits.items() for filename in names

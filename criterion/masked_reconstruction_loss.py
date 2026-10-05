@@ -71,12 +71,25 @@ class MaskedReconstructionLoss(nn.Module):
 
         per_patch = self._elementwise_loss(pred, target).mean(dim=-1)
 
-        masked = per_patch[token_mask & attn_mask].mean()
-        logs = {"masked_loss": masked.item()}
+        masked = self._mean_or_zero(per_patch, token_mask & attn_mask)
+        logs = {"masked_loss": masked.detach()}
 
         if self.alpha == 0:
             return masked, logs
 
-        visible = per_patch[(~token_mask) & attn_mask].mean()
-        logs["visible_loss"] = visible.item()
+        visible = self._mean_or_zero(per_patch, (~token_mask) & attn_mask)
+        logs["visible_loss"] = visible.detach()
         return masked + self.alpha * visible, logs
+
+    @staticmethod
+    def _mean_or_zero(values: torch.Tensor, selection: torch.Tensor) -> torch.Tensor:
+        """Mean over the selected entries, or a differentiable zero when none are selected.
+
+        ``values[selection].mean()`` is NaN for an empty selection, which happens when a
+        batch has no masked patch or, with ``alpha`` set, no visible one. A NaN loss
+        poisons every parameter on the backward pass, so an empty selection contributes
+        nothing instead.
+        """
+        if not bool(selection.any()):
+            return values.sum() * 0.0
+        return values[selection].mean()

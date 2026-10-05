@@ -1,6 +1,6 @@
 [project]
 name = "BioFoundation"
-version = "0.1.0"
+version = "0.2.0"
 description = "BioFoundation is a flexible and extensible codebase for deep learning with biological signals."
 readme = "README.md"
 license = "Apache-2.0"
@@ -13,11 +13,13 @@ dependencies = [
   "peft",
   "scipy",
   "h5py",
+  "lmdb",
   "python-dateutil",
   "lightning",
   "tqdm",
   "pandas",
   "mne",
+  "asrpy",
   "psutil",
   "pyyaml",
   "tensorboardX",
@@ -35,6 +37,13 @@ dependencies = [
   "rotary-embedding-torch",
   "wandb",
 ]
+
+[tool.pytest.ini_options]
+# tests/model_tests imports the repository's own packages (models, tasks, criterion).
+# Without this, `pytest tests/model_tests` puts only the test directory on sys.path and
+# fails with ModuleNotFoundError; `python -m pytest` happened to work by adding the cwd.
+pythonpath = ["."]
+testpaths = ["tests/model_tests"]
 
 [tool.uv.sources]
 warmup-scheduler = { git = "https://github.com/ildoonet/pytorch-gradual-warmup-lr.git" }

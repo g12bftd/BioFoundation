@@ -119,15 +119,24 @@ def bipolar_montage(raw):
 
     data = raw.get_data()
     channel_names = list(raw.ch_names)
-    signals, coords = [], []
+    signals, coords, missing = [], [], []
 
     for active, reference in BIPOLAR_MONTAGE:
         active_channel = available.get(active.upper())
         reference_channel = available.get(reference.upper())
         if active_channel is None or reference_channel is None:
+            missing.append(f"{active}-{reference}")
             continue
         signals.append(data[channel_names.index(active_channel)] - data[channel_names.index(reference_channel)])
         coords.append([electrode_coordinate(active.upper()), electrode_coordinate(reference.upper())])
+
+    if missing:
+        # The channel count feeds model.num_channels, so a short montage must not pass
+        # unnoticed: it would silently train on fewer channels than the config declares.
+        print(
+            f"  {os.path.basename(path)}: {len(signals)} of {len(BIPOLAR_MONTAGE)} bipolar "
+            f"pairs available; missing {', '.join(missing)}"
+        )
 
     if not signals:
         return None, None

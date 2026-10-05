@@ -97,7 +97,22 @@ class MaskedAutoencoderPretrainingTask(SafetensorsCheckpointMixin, pl.LightningM
             batch["input"] = x.reshape(batch_size, channels, -1, self.patch_size)
         return batch
 
-    def _shared_step(self, batch: Dict[str, Any]) -> torch.Tensor:
+    def _validation_generator(self, batch: Dict[str, Any]) -> torch.Generator:
+        """Return a generator that makes the validation mask reproducible.
+
+        Training draws a fresh mask every step, which is the point of masked
+        pre-training. Validation must not: ``val_loss`` selects checkpoints, and a new
+        random mask each epoch adds sampling noise to the quantity being compared.
+        Seeding from the configured seed and the batch shape gives every epoch the same
+        masks while still varying them across batches.
+        """
+        generator = torch.Generator(device=batch["input"].device)
+        generator.manual_seed(int(self.hparams.get("seed", 0)) * 1_000_003 + int(batch["input"].shape[0]))
+        return generator
+
+    def _shared_step(
+        self, batch: Dict[str, Any], generator: Optional[torch.Generator] = None
+    ) -> torch.Tensor:
         """Run masking, encoding, decoding and loss for one batch."""
         require_batch_fields(batch, self.batch_requirements)
         x = batch["input"]
@@ -105,7 +120,7 @@ class MaskedAutoencoderPretrainingTask(SafetensorsCheckpointMixin, pl.LightningM
 
         tokens = self.model.patch_embed(x)
         tokens, token_mask, attn_mask = self.prepare_tokens(
-            tokens, num_padded_channels=batch.get("num_padded_channels")
+            tokens, num_padded_channels=batch.get("num_padded_channels"), generator=generator
         )
 
         latent = self.model(
@@ -131,18 +146,24 @@ class MaskedAutoencoderPretrainingTask(SafetensorsCheckpointMixin, pl.LightningM
 
     def validation_step(self, batch: Dict[str, Any], batch_idx: int) -> torch.Tensor:
         """Compute and log the validation reconstruction loss."""
-        loss = self._shared_step(as_signal_batch(batch))
+        loss = self._shared_step(as_signal_batch(batch), generator=self._validation_generator(batch))
         self.log("val_loss", loss, on_step=True, on_epoch=True, prog_bar=True, logger=True, sync_dist=True)
         return loss
 
     def prepare_tokens(
-        self, tokens: torch.Tensor, num_padded_channels: Optional[torch.Tensor] = None
+        self,
+        tokens: torch.Tensor,
+        num_padded_channels: Optional[torch.Tensor] = None,
+        generator: Optional[torch.Generator] = None,
     ) -> Tuple[torch.Tensor, torch.Tensor, Optional[torch.Tensor]]:
         """Insert pad tokens, then mask a random subset of the real tokens.
 
         Args:
             tokens: Token embeddings of shape ``(batch, num_tokens, embed_dim)``.
             num_padded_channels: Per-sample count of trailing padded channels.
+                ``num_padded_timesteps`` is deliberately not read: every pre-training
+                window is exactly ``max_timesteps`` long, so there is never any temporal
+                padding to exclude. Shorter windows would need it handled here.
 
         Returns:
             Tuple of tokens reshaped to ``(batch, num_channels, num_patches, embed_dim)``,
@@ -162,11 +183,14 @@ class MaskedAutoencoderPretrainingTask(SafetensorsCheckpointMixin, pl.LightningM
             attn_mask = (~padded).int()
             tokens = torch.where(padded.unsqueeze(-1), self.model.pad_token.to(tokens.dtype), tokens)
 
-        tokens, token_mask = self.mask_tokens(tokens, attn_mask)
+        tokens, token_mask = self.mask_tokens(tokens, attn_mask, generator=generator)
         return tokens.reshape(batch_size, channels, patches, embed_dim), token_mask, attn_mask
 
     def mask_tokens(
-        self, tokens: torch.Tensor, attn_mask: Optional[torch.Tensor] = None
+        self,
+        tokens: torch.Tensor,
+        attn_mask: Optional[torch.Tensor] = None,
+        generator: Optional[torch.Generator] = None,
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         """Replace a random subset of real tokens with the learned mask token.
 
@@ -186,7 +210,7 @@ class MaskedAutoencoderPretrainingTask(SafetensorsCheckpointMixin, pl.LightningM
         batch_size, num_tokens, _ = tokens.shape
         device = tokens.device
 
-        noise = torch.rand(batch_size, num_tokens, device=device)
+        noise = torch.rand(batch_size, num_tokens, device=device, generator=generator)
         if attn_mask is not None:
             noise = noise.masked_fill(attn_mask == 0, 2.0)
             valid_length = attn_mask.sum(dim=1)
@@ -234,8 +258,8 @@ class MaskedAutoencoderPretrainingTask(SafetensorsCheckpointMixin, pl.LightningM
         """Advance the timm-style scheduler once per optimiser step."""
         scheduler.step_update(num_updates=self.global_step)
 
-    def load_from_checkpoint(
-        self, checkpoint_path, map_location=None, hparams_file=None, strict=None, **kwargs
+    def load_weights(
+        self, checkpoint_path, map_location=None, **kwargs
     ) -> "MaskedAutoencoderPretrainingTask":
         """Load encoder weights from a checkpoint, skipping the decoder.
 

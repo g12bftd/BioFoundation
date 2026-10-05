@@ -135,13 +135,26 @@ def main():
     args = build_arg_parser("TUAB abnormality detection to LMDB").parse_args()
     generator = np.random.default_rng(SPLIT_SEED)
 
-    tasks = []
+    # Assign each subject to one split, then emit that subject's recordings under every
+    # label it appears with. Shuffling and cutting per label would place a subject with
+    # both a normal and an abnormal session in train for one label and val for the other.
+    development = {}
     for label in (0, 1):
-        development = subject_ids(recording_folder(args.input_dir, "train", label))
-        generator.shuffle(development)
-        cut = int((1.0 - VALIDATION_FRACTION) * len(development))
-        tasks += [("train", args.input_dir, subject, label) for subject in development[:cut]]
-        tasks += [("val", args.input_dir, subject, label) for subject in development[cut:]]
+        for subject in subject_ids(recording_folder(args.input_dir, "train", label)):
+            development.setdefault(subject, []).append(label)
+
+    subjects = sorted(development)
+    generator.shuffle(subjects)
+    cut = int((1.0 - VALIDATION_FRACTION) * len(subjects))
+    assignment = {subject: "train" for subject in subjects[:cut]}
+    assignment.update({subject: "val" for subject in subjects[cut:]})
+
+    tasks = [
+        (assignment[subject], args.input_dir, subject, label)
+        for subject in subjects
+        for label in development[subject]
+    ]
+    for label in (0, 1):
         tasks += [
             ("test", args.input_dir, subject, label)
             for subject in subject_ids(recording_folder(args.input_dir, "test", label))
